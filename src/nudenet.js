@@ -4,7 +4,20 @@ const log = require('@vladmandic/pilogger');
 const tf = require('@tensorflow/tfjs-node');
 const argparse = require('argparse');
 
-const { Canvas, loadImage } = require('canvas'); // eslint-disable-line node/no-unpublished-require
+let CanvasLib;
+try {
+  CanvasLib = require('@napi-rs/canvas'); // eslint-disable-line global-require
+} catch (err) {
+  CanvasLib = require('canvas'); // eslint-disable-line global-require, node/no-unpublished-require
+}
+
+const { loadImage } = CanvasLib;
+
+function createCanvas(width, height) {
+  if (typeof CanvasLib.createCanvas === 'function') return CanvasLib.createCanvas(width, height);
+  if (typeof CanvasLib.Canvas === 'function') return new CanvasLib.Canvas(width, height);
+  throw new Error('Canvas implementation does not provide a createCanvas or Canvas export');
+}
 
 const options = { // options
   debug: true,
@@ -89,7 +102,7 @@ function rect({ canvas, x = 0, y = 0, width = 0, height = 0, radius = 8, lineWid
 // blur par of canvas by redrawing it with smaller resulution
 function blur({ canvas, left = 0, top = 0, width = 0, height = 0 }) {
   if (!canvas) return;
-  const blurCanvas = new Canvas(width / options.blurRadius, height / options.blurRadius);
+  const blurCanvas = createCanvas(width / options.blurRadius, height / options.blurRadius);
   const blurCtx = blurCanvas.getContext('2d');
   if (!blurCtx) return;
   blurCtx.imageSmoothingEnabled = true;
@@ -119,24 +132,46 @@ async function saveProcessedImage(inImage, outImage, data) {
   if (!data) return false;
   return new Promise(async (resolve) => { // eslint-disable-line no-async-promise-executor
     const original = await loadImage(inImage); // load original image
-    const c = new Canvas(original.width, original.height); // create canvas
+    const c = createCanvas(original.width, original.height); // create canvas
     const ctx = c.getContext('2d');
     ctx.drawImage(original, 0, 0, c.width, c.height); // draw original onto output canvas
     for (const obj of data.parts) { // draw all detected objects
       if (options.composite.nude.includes(obj.id) && options.blurNude) blur({ canvas: c, left: obj.box[0], top: obj.box[1], width: obj.box[2], height: obj.box[3] });
       rect({ canvas: c, x: obj.box[0], y: obj.box[1], width: obj.box[2], height: obj.box[3], title: `${Math.round(100 * obj.score)}% ${obj.class}` });
     }
-    const out = fs.createWriteStream(outImage); // write canvas to jpeg
-    out.on('finish', () => {
+    const handleSuccess = () => {
       if (options.debug) log.state('created output image:', outImage);
       resolve(true);
-    });
-    out.on('error', (err) => {
+    };
+    const handleError = (err) => {
       log.error('error creating image:', outImage, err);
-      resolve(true);
-    });
-    const stream = c.createJPEGStream({ quality: 0.6, progressive: true, chromaSubsampling: true });
-    stream.pipe(out);
+      resolve(false);
+    };
+    if (typeof c.createJPEGStream === 'function') {
+      const out = fs.createWriteStream(outImage); // write canvas to jpeg via stream when supported
+      out.on('finish', handleSuccess);
+      out.on('error', handleError);
+      const stream = c.createJPEGStream({ quality: 0.6, progressive: true, chromaSubsampling: true });
+      stream.pipe(out);
+    } else if (typeof c.toBuffer === 'function') {
+      try {
+        const buffer = c.toBuffer('image/jpeg', { quality: 0.6, progressive: true, chromaSubsampling: true });
+        await fs.promises.writeFile(outImage, buffer);
+        handleSuccess();
+      } catch (err) {
+        handleError(err);
+      }
+    } else if (typeof c.encode === 'function') {
+      try {
+        const buffer = await c.encode('jpeg', { quality: 60, progressive: true, chromaSubsampling: true });
+        await fs.promises.writeFile(outImage, buffer);
+        handleSuccess();
+      } catch (err) {
+        handleError(err);
+      }
+    } else {
+      handleError(new Error('No supported canvas encoding method found'));
+    }
   });
 }
 
