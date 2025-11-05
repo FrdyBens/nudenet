@@ -2,16 +2,24 @@
 
 ## Notes
 
-- Models included in `/models/` were converted to **TFJS Graph model** format from the original repository  
-  Model descriptors and signature have been additionally parsed for readability  
-- Models includ both **default** and **base** variations  
-  Note that classes list are different for each variation  
-- Models use dynamic input sizes  
-- Results parsing implementation does not follow original  
-  and is implemented using native TFJS ops and optimized for JavaScript execution  
-- Code also includes simple bluring function for exposed body parts in the input image  
-- Example implementation for **NodeJS**: `src/nudenet.js`  
-- Example implementation for **Browsers**: `src/index.ts`  
+- Models included in `/models/` were converted to **TFJS Graph model** format from the original repository
+  Model descriptors and signature have been additionally parsed for readability
+- Models includ both **default** and **base** variations
+  Note that classes list are different for each variation
+- Models use dynamic input sizes
+- Results parsing implementation does not follow original
+  and is implemented using native TFJS ops and optimized for JavaScript execution
+- Code also includes simple bluring function for exposed body parts in the input image
+- Example implementation for **NodeJS**: `src/nudenet.js`
+- Example implementation for **Browsers**: `src/index.ts`
+
+## Setup
+
+- Install dependencies with `npm install`. The project now uses [`@napi-rs/canvas`](https://www.npmjs.com/package/@napi-rs/canvas)
+  which provides prebuilt binaries for modern Node.js releases (Node.js 18 and newer). This removes the need to compile the legacy
+  `canvas` package or install extra system libraries. A fallback to the legacy implementation is still available via the optional
+  dependency declared in `package.json`.
+- Run the sample CLI with `npm start` (see the command output below for the expected console log).
 
 <br>
 
